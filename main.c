@@ -94,6 +94,10 @@ int main(int argc, char **argv)
   return 0;
 }
 
+double getBalance(int account_number) {
+  return 0.0;
+}
+
 int deposit(int account_number, double amount)
 {
   return 0;
@@ -108,4 +112,5 @@ int withdraw(int account_number, double amount)
 int transfer(int from_account_number, int to_account_number, double amount)
 {
   // TODO: check balance
+  return 0;
 }
