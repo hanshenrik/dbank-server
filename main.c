@@ -4,7 +4,8 @@
 #include <sqlite3.h>
 #include <mpi.h>
 
-#define MSGsize 100
+#define MSG_SIZE 100
+#define QUERY_SIZE 100
 #define MASTER  0
 
 // stuff to use
@@ -32,7 +33,7 @@ int main(int argc, char **argv)
   int tag = 50;
   int length;
   char name[MPI_MAX_PROCESSOR_NAME + 1];
-  char message[MSGsize];
+  char message[MSG_SIZE];
   MPI_Status status;
   MPI_Init(&argc, &argv); // argc and argv passed by address to all MPI processes
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); // returns taskID = rank of calling process
@@ -52,7 +53,7 @@ int main(int argc, char **argv)
     // printf("HO: MPI_MAX_PROCESSOR_NAME = %d\n", MPI_MAX_PROCESSOR_NAME);
     
     for (source = 1; source < NP; source++)
-    { MPI_Recv(message, MSGsize, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+    { MPI_Recv(message, MSG_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
       printf("HO: %s\n", message);
     }
   }
@@ -83,8 +84,10 @@ int main(int argc, char **argv)
     }
     
     // wait for different amount of time before executing query
+    char query[QUERY_SIZE];
+    sprintf(query, "INSERT INTO table1 VALUES('proc', %d);", my_rank);
     sleep(my_rank);
-    rc = sqlite3_exec(db, "INSERT INTO table1 VALUES('proc', 13);", callback, 0, &zErrMsg);
+    rc = sqlite3_exec(db, query, callback, 0, &zErrMsg);
     if(rc != SQLITE_OK) {
       fprintf(stderr, "SQL error: %s\n", zErrMsg);
       sqlite3_free(zErrMsg);
