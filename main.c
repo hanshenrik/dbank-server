@@ -1,6 +1,7 @@
-#include <stdio.h> 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sqlite3.h>
 #include <mpi.h>
 
 #define MSGsize 100
@@ -13,6 +14,16 @@
 // MPI_Waitall
 // MPI_Waitany
 
+
+static int callback(void *notUsed, int argc, char **argv, char **azColName){
+  int i;
+  printf("------------------------------\n");
+  for (i = 0; i < argc; i++) {
+    printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+  }
+  printf("------------------------------\n");
+  return 0;
+}
 
 int main(int argc, char **argv)
 { // MPI variables
@@ -57,6 +68,40 @@ int main(int argc, char **argv)
     MPI_Get_processor_name(name, &length);
     printf("BO: name = %s, length = %d\n", name, length);
 
+    // db testing
+    sqlite3 *db;
+    sqlite3_backup *pBackup;
+    char *zErrMsg = 0;
+    int rc;
+    
+    rc = sqlite3_open("testdb.db", &db);
+
+    if (rc) {
+      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+      return(1);
+    }
+    
+    // wait for different amount of time before executing query
+    sleep(my_rank);
+    rc = sqlite3_exec(db, "INSERT INTO table1 VALUES('proc', 13);", callback, 0, &zErrMsg);
+    if(rc != SQLITE_OK) {
+      fprintf(stderr, "SQL error: %s\n", zErrMsg);
+      sqlite3_free(zErrMsg);
+    }
+
+    // save it
+    pBackup = sqlite3_backup_init(db, "main", db, "main");
+    if (pBackup) {
+      (void) sqlite3_backup_step(pBackup, -1);
+      (void) sqlite3_backup_finish(pBackup);
+    }
+    rc = sqlite3_errcode(db);
+    
+    // close it
+    sqlite3_close(db);
+    
+
     // start child processes (bank accounts)
     for (i = 0; i < number_of_accounts; i++)
     { pid = fork();
@@ -66,10 +111,10 @@ int main(int argc, char **argv)
       }
       if (pid == 0) {
         printf("BO%d: pid == 0, i = %d\n", my_rank, i);
-        while (1) {
-          sleep(1);
-          printf("%d_%d\n", my_rank, i);
-        }
+        // while (1) {
+        //   sleep(1);
+        //   printf("%d_%d\n", my_rank, i);
+        // }
         return 0;
       } else {
         // printf("BO: pid != 0\n");
