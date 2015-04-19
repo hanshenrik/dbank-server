@@ -5,7 +5,7 @@
 #include <mpi.h>
 
 #define MSG_SIZE 100
-#define QUERY_SIZE 100
+#define QUERY_SIZE 500
 #define MASTER  0
 
 // stuff to use
@@ -16,14 +16,20 @@
 // MPI_Waitany
 
 
-static int callback(void *notUsed, int argc, char **argv, char **azColName){
+static int callback(void *pswd, int argc, char **argv, char **azColName){
   int i;
-  printf("------------------------------\n");
-  for (i = 0; i < argc; i++) {
-    printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+  char *inputPassword = (char*) pswd;
+  char *dbPassword = argv[1];
+  printf("CB: argc = %d\n", argc);
+  printf("CB: password = %s\n", inputPassword);
+  printf("CB: dbPassword = %s\n", dbPassword);
+  if (strcmp(inputPassword, dbPassword) == 0) {
+    printf("CB: match!\n");
+    return 0;
+  } else {
+    printf("CB: no match!\n");
   }
-  printf("------------------------------\n");
-  return 0;
+  return 1;
 }
 
 int main(int argc, char **argv)
@@ -40,6 +46,11 @@ int main(int argc, char **argv)
   MPI_Comm_size(MPI_COMM_WORLD, &NP); // returns total no of MPI processes available
 
   // shared bank variables
+  sqlite3 *db;
+  sqlite3_backup *pBackup;
+  char *zErrMsg = 0;
+  int rc;
+  char query[QUERY_SIZE];
 
   int i;
   for (i = 0; i < argc; i++) {
@@ -49,13 +60,47 @@ int main(int argc, char **argv)
   if (my_rank == MASTER) // master
   { // Head Office variables
 
+    // DEV should be retrieved from socket request
+    char username[30] = "kreps";
+    char password[30] = "krepsx"; // should only receive salt and hash.
+    int account_id = 1;
+    int operation = 0; // 0 = getBalance, 1 = deposit, 2 = withdraw, 3 = transfer
+
     printf("HO: started\n");
-    // printf("HO: MPI_MAX_PROCESSOR_NAME = %d\n", MPI_MAX_PROCESSOR_NAME);
-    
-    for (source = 1; source < NP; source++)
-    { MPI_Recv(message, MSG_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
-      printf("HO: %s\n", message);
+    MPI_Get_processor_name(name, &length);
+    printf("HO: name = %s\n", name);
+    printf("HO: my_rank = %d\n", my_rank);
+
+    // authenticate user against users.db
+    rc = sqlite3_open("users.db", &db);
+
+    if (rc) {
+      fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+      return(1);
     }
+    
+    sprintf(query, "SELECT username, password FROM users WHERE username = '%s'", username); // switch password to salt
+    rc = sqlite3_exec(db, query, callback, (void*) password, &zErrMsg);
+    printf("HO: rc = %d\n", rc);
+    
+    if(rc != SQLITE_OK) {
+      fprintf(stderr, "SQL error: %s\n", zErrMsg);
+      sqlite3_free(zErrMsg);
+    }
+    sqlite3_close(db);
+
+    else { // user was valid, continue
+      printf("HO: user authenticated!\n");
+
+      // find out which branch to contact
+
+    }
+    
+    // for (source = 1; source < NP; source++)
+    // { MPI_Recv(message, MSG_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+    //   printf("HO: %s\n", message);
+    // }
   }
 
   else // slave
@@ -68,42 +113,6 @@ int main(int argc, char **argv)
 
     MPI_Get_processor_name(name, &length);
     printf("BO: name = %s, length = %d\n", name, length);
-
-    // db testing
-    sqlite3 *db;
-    sqlite3_backup *pBackup;
-    char *zErrMsg = 0;
-    int rc;
-    
-    rc = sqlite3_open("testdb.db", &db);
-
-    if (rc) {
-      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-      sqlite3_close(db);
-      return(1);
-    }
-    
-    // wait for different amount of time before executing query
-    char query[QUERY_SIZE];
-    sprintf(query, "INSERT INTO table1 VALUES('proc', %d);", my_rank);
-    sleep(my_rank);
-    rc = sqlite3_exec(db, query, callback, 0, &zErrMsg);
-    if(rc != SQLITE_OK) {
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      sqlite3_free(zErrMsg);
-    }
-
-    // save it
-    pBackup = sqlite3_backup_init(db, "main", db, "main");
-    if (pBackup) {
-      (void) sqlite3_backup_step(pBackup, -1);
-      (void) sqlite3_backup_finish(pBackup);
-    }
-    rc = sqlite3_errcode(db);
-    
-    // close it
-    sqlite3_close(db);
-    
 
     // start child processes (bank accounts)
     for (i = 0; i < number_of_accounts; i++)
