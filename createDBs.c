@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     return(1);
   }
   
-  sprintf(query, "CREATE TABLE accounts(id INT, branch INT, username VARCHAR(30), balance DOUBLE); INSERT INTO accounts VALUES(1, 1, 'kreps', 100); INSERT INTO accounts VALUES(2, 2, 'kreps', 50); INSERT INTO accounts VALUES(3, 1, 'reke', 50);");
+  sprintf(query, "CREATE TABLE accounts(id INT, branch INT, username VARCHAR(30), balance DOUBLE); INSERT INTO accounts VALUES(1, 1, 'kreps', 100); INSERT INTO accounts VALUES(2, 2, 'kreps', 50); INSERT INTO accounts VALUES(3, 1, 'reke', 220);");
   rc = sqlite3_exec(db, query, callback, 0, &zErrMsg);
   if(rc != SQLITE_OK) {
     fprintf(stderr, "SQL error: %s\n", zErrMsg);
