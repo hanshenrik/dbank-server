@@ -61,10 +61,11 @@ int main(int argc, char **argv)
   { // Head Office variables
 
     // DEV should be retrieved from socket request
-    char username[30] = "kreps";
-    char password[30] = "krepsx"; // should only receive salt and hash.
+    char username[30] = "reke";
+    char password[30] = "rekex"; // should only receive salt and hash.
     int account_id = 1;
     int operation = 0; // 0 = getBalance, 1 = deposit, 2 = withdraw, 3 = transfer
+    double amount = 33.33;
 
     printf("HO: started\n");
     MPI_Get_processor_name(name, &length);
@@ -72,7 +73,7 @@ int main(int argc, char **argv)
     printf("HO: my_rank = %d\n", my_rank);
 
     // authenticate user against users.db
-    rc = sqlite3_open("users.db", &db);
+    rc = sqlite3_open("users.db", &db); // change to v2 for read-only flags etc.
 
     if (rc) {
       fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
@@ -88,14 +89,32 @@ int main(int argc, char **argv)
       fprintf(stderr, "SQL error: %s\n", zErrMsg);
       sqlite3_free(zErrMsg);
     }
-    sqlite3_close(db);
 
     else { // user was valid, continue
       printf("HO: user authenticated!\n");
 
       // find out which branch to contact
-
+      sqlite3_stmt *statement;
+      sprintf(query, "SELECT branch FROM users WHERE username = '%s'", username);
+      sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
+      // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
+      int row = sqlite3_step(statement);
+      int branch;
+      if (row == SQLITE_ROW) {
+        // const unsigned char *text;
+        // text = sqlite3_column_int(statement, 0);
+        branch = sqlite3_column_int(statement, 0);
+        printf("%d: %d\n", row, branch);
+      } else {
+        fprintf(stderr, "Failed..\n");
+        return 1;
+      }
+      sqlite3_reset(statement); // not sure if this is correct usage
+      sqlite3_finalize(statement);
+      sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
+      MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, tag, MPI_COMM_WORLD);
     }
+    sqlite3_close(db);
     
     // for (source = 1; source < NP; source++)
     // { MPI_Recv(message, MSG_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
@@ -113,6 +132,11 @@ int main(int argc, char **argv)
 
     MPI_Get_processor_name(name, &length);
     printf("BO: name = %s, length = %d\n", name, length);
+
+    if (my_rank == 2) {
+      MPI_Recv(message, MSG_SIZE, MPI_CHAR, MASTER, tag, MPI_COMM_WORLD, &status);
+      printf("BO2 recv from master: %s\n", message);
+    }
 
     // start child processes (bank accounts)
     for (i = 0; i < number_of_accounts; i++)
