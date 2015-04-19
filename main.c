@@ -7,6 +7,7 @@
 #define MSG_SIZE 100
 #define QUERY_SIZE 500
 #define MASTER  0
+// TODO: define all db cols here
 
 double balance = 100.00;
 
@@ -18,7 +19,10 @@ double balance = 100.00;
 // MPI_Waitany
 
 
-// gSOAP with simple HTTP (Proxy Basic?) Authentication, don't have time to bother with HTTPS/OpenSSL, but mention in report!
+// gSOAP with simple HTTP (Proxy Basic?) Authentication,
+// don't have time to bother with HTTPS/OpenSSL, but mention in report!
+// Use gSOAP between nodes as well, so client calls head node, which in
+// turn calls branch node's web service?
 
 static int callback(void *pswd, int argc, char **argv, char **azColName){
   int i;
@@ -67,7 +71,7 @@ int main(int argc, char **argv)
     // DEV should be retrieved from socket request
     char username[30] = "reke";
     char password[30] = "rekex"; // should only receive salt and hash.
-    int account_id = 1;
+    int account_id = 2;
     int operation = 0; // 0 = getBalance, 1 = deposit, 2 = withdraw, 3 = transfer
     double amount = 33.33;
 
@@ -115,6 +119,7 @@ int main(int argc, char **argv)
       sqlite3_finalize(statement);
 
       sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
+      printf("HO: sending to branch %d\n", branch);
       MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, tag, MPI_COMM_WORLD);
     }
     sqlite3_close(db);
@@ -161,10 +166,6 @@ int main(int argc, char **argv)
         }
         if (pid == 0) {
           printf("BO%d: pid == 0, id = %d, balance = %f\n", my_rank, id, balance);
-          // while (1) {
-          //   sleep(1);
-          //   printf("%d_%d\n", my_rank, i);
-          // }
           return 0;
         } else {
           // printf("BO: pid != 0\n");
@@ -199,16 +200,16 @@ int main(int argc, char **argv)
     //   }
     // }
     
-    if (my_rank == 2) {
-      MPI_Recv(message, MSG_SIZE, MPI_CHAR, MASTER, tag, MPI_COMM_WORLD, &status);
-      printf("BO2 recv from master: %s\n", message);
-    }
+    // if (my_rank == 2) {
+    //   MPI_Recv(message, MSG_SIZE, MPI_CHAR, MASTER, tag, MPI_COMM_WORLD, &status);
+    //   printf("BO2 recv from master: %s\n", message);
+    // }
 
     // wait for all children to exit
     // while ( (wpid = wait(&account_status) ) > 0) {}
 
     // wait for my_tank seconds to distinguish slaves in output
-    sleep(my_rank);
+    // sleep(my_rank);
 
     // create message
     sprintf(message, "From process %d on processor %s", my_rank, name);
