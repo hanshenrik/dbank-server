@@ -20,7 +20,7 @@ int main(int argc , char *argv[])
     }
     puts("Socket created");
      
-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server.sin_addr.s_addr = inet_addr("161.73.147.225");
     server.sin_family = AF_INET;
     server.sin_port = htons( 5108 );
  
