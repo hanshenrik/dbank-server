@@ -4,12 +4,13 @@
 #include <sqlite3.h>
 #include <mpi.h>
 
-#define MSG_SIZE 100
+#define MESSAGE_SIZE 100
+#define CLIENT_MESSAGE_SIZE 2000
 #define QUERY_SIZE 500
 #define MASTER  0
 // TODO: define all db cols here
 
-double balance = 100.00;
+double balance = 13.37;
 
 // stuff to use
 // MPI_Is_thread_main
@@ -19,10 +20,40 @@ double balance = 100.00;
 // MPI_Waitany
 
 
-// gSOAP with simple HTTP (Proxy Basic?) Authentication,
-// don't have time to bother with HTTPS/OpenSSL, but mention in report!
-// Use gSOAP between nodes as well, so client calls head node, which in
-// turn calls branch node's web service?
+void *connection_handler(void *);
+
+double getBalance(int account_number) {
+  // rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
+
+  // if (rc) {
+  //   fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
+  //   sqlite3_close(db);
+  //   return(1);
+  // }
+  
+  // sqlite3_stmt *statement;
+  // sprintf(query, "SELECT balance FROM accounts WHERE id = '%s'", account_number);
+  // sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
+  // // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
+
+  // int row = sqlite3_step(statement);
+  // printf("row = %d\n", row);
+  // if (row == SQLITE_ROW) {
+  //   double balance;
+  //   balance = sqlite3_column_int(statement, 0);
+  // } else if (row == SQLITE_DONE) {
+  //   break;
+  // } else {
+  //   fprintf(stderr, "Failed..\n");
+  //   return 1;
+  // }
+  // sqlite3_finalize(statement);
+  // sqlite3_close(db);
+
+  //MPI_Send(&balance, sizeof(balance) + 1, MPI_DOUBLE, MASTER, 50, MPI_COMM_WORLD);
+  return balance;
+}
+
 
 static int callback(void *pswd, int argc, char **argv, char **azColName){
   int i;
@@ -47,7 +78,7 @@ int main(int argc, char **argv)
   int tag = 50;
   int length;
   char name[MPI_MAX_PROCESSOR_NAME + 1];
-  char message[MSG_SIZE];
+  char message[MESSAGE_SIZE];
   MPI_Status status;
   MPI_Init(&argc, &argv); // argc and argv passed by address to all MPI processes
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); // returns taskID = rank of calling process
@@ -118,14 +149,17 @@ int main(int argc, char **argv)
       }
       sqlite3_finalize(statement);
 
+      double b;
       sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
-      printf("HO: sending to branch %d\n", branch);
-      MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, tag, MPI_COMM_WORLD);
+      printf("HO: sending to branch %d with tag %d\n", branch, 0);
+      MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
+      MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
+      printf("HO: b = %f\n", b);
     }
     sqlite3_close(db);
     
     // for (source = 1; source < NP; source++)
-    // { MPI_Recv(message, MSG_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+    // { MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
     //   printf("HO: %s\n", message);
     // }
   }
@@ -200,10 +234,12 @@ int main(int argc, char **argv)
     //   }
     // }
     
-    // if (my_rank == 2) {
-    //   MPI_Recv(message, MSG_SIZE, MPI_CHAR, MASTER, tag, MPI_COMM_WORLD, &status);
-    //   printf("BO2 recv from master: %s\n", message);
-    // }
+    if (my_rank == 2) {
+      // receive anything
+      MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+      printf("BO2 recv from master: %s\n", message);
+      getBalance(2);
+    }
 
     // wait for all children to exit
     // while ( (wpid = wait(&account_status) ) > 0) {}
@@ -223,36 +259,6 @@ int main(int argc, char **argv)
   return 0;
 }
 
-double getBalance(int account_number) {
-  // rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
-
-  // if (rc) {
-  //   fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
-  //   sqlite3_close(db);
-  //   return(1);
-  // }
-  
-  // sqlite3_stmt *statement;
-  // sprintf(query, "SELECT balance FROM accounts WHERE id = '%s'", account_number);
-  // sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
-  // // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
-
-  // int row = sqlite3_step(statement);
-  // printf("row = %d\n", row);
-  // if (row == SQLITE_ROW) {
-  //   double balance;
-  //   balance = sqlite3_column_int(statement, 0);
-  // } else if (row == SQLITE_DONE) {
-  //   break;
-  // } else {
-  //   fprintf(stderr, "Failed..\n");
-  //   return 1;
-  // }
-  // sqlite3_finalize(statement);
-  // sqlite3_close(db);
-
-  return balance;
-}
 
 int deposit(int account_number, double amount)
 {
@@ -268,5 +274,38 @@ int withdraw(int account_number, double amount)
 int transfer(int from_account_number, int to_account_number, double amount)
 {
   // TODO: check balance
+  return 0;
+}
+
+
+/* Handles client connections */
+void *connection_handler(void *socket_descriptor)
+{ // Get socket descriptor
+  int sock = *(int*)socket_descriptor;
+  
+  int read_size;
+  char *message, client_message[CLIENT_MESSAGE_SIZE];
+  
+  // Answer client
+  message = "Connection successfull! Processing request...\n";
+  write(sock, message, strlen(message));
+  
+  // Wait for messages from client
+  while ( (read_size = recv(sock, client_message, CLIENT_MESSAGE_SIZE, 0)) > 0 )
+  { // TODO: process the queries
+  }
+   
+  if (read_size == 0)
+  { puts("CH: Client disconnected.");
+    fflush(stdout);
+  }
+
+  else if(read_size == -1)
+  { perror("recv failed");
+  }
+
+  // Free socket pointer
+  free(socket_descriptor);
+  
   return 0;
 }
