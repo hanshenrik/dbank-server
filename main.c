@@ -1,14 +1,30 @@
+/* General stuff */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Sockets */
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
+/* DB - sqlite3 */
 #include <sqlite3.h>
+
+/* MPI */
 #include <mpi.h>
 
+
+/* MPI related */
 #define MESSAGE_SIZE 100
-#define CLIENT_MESSAGE_SIZE 2000
-#define QUERY_SIZE 500
 #define MASTER  0
+
+/* sqlite3 related */
+#define QUERY_SIZE 500
 // TODO: define all db cols here
+
+/* Sockets related */
+#define CLIENT_MESSAGE_SIZE 2000
+#define MAX_CONNECTIONS_IN_QUEUE 3
 
 double balance = 13.37;
 
@@ -99,6 +115,60 @@ int main(int argc, char **argv)
   if (my_rank == MASTER) // master
   { // Head Office variables
 
+    // Socket stuff
+    int socket_descriptor, client_sock, c, *new_sock;
+    struct sockaddr_in server, client;
+     
+    // Create socket
+    socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_descriptor == -1) {
+      printf("Could not create socket");
+    }
+    puts("Socket created");
+     
+    // Prepare sockaddr_in structure
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons( 5108 );
+     
+    // Bind
+    if ( bind(socket_descriptor,(struct sockaddr *)&server , sizeof(server)) < 0) {
+      perror("Bind failed. Error");
+      return 1;
+    }
+    puts("Bind done");
+     
+    // Listen for new requests
+    listen(socket_descriptor, MAX_CONNECTIONS_IN_QUEUE);
+    puts("Waiting for incoming connections...");
+     
+     
+    c = sizeof(struct sockaddr_in);
+    // Accept incoming connection
+    while ( (client_sock = accept(socket_descriptor, (struct sockaddr *)&client, (socklen_t*)&c)) ) {
+      puts("Connection accepted!");
+      
+      pthread_t sniffer_thread;
+      new_sock = malloc(1);
+      *new_sock = client_sock;
+      
+      if ( pthread_create(&sniffer_thread, NULL,  connection_handler, (void*) new_sock) < 0) {
+        perror("could not create thread");
+        return 1;
+      }
+       
+      // Now join the thread, so that we dont terminate before the thread
+      pthread_join(sniffer_thread, NULL);
+      puts("Handler assigned");
+    }
+     
+    if (client_sock < 0) {
+      perror("accept failed");
+      return 1;
+    }
+
+
+
     // DEV should be retrieved from socket request
     char username[30] = "reke";
     char password[30] = "rekex"; // should only receive salt and hash.
@@ -152,8 +222,8 @@ int main(int argc, char **argv)
       double b;
       sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
       printf("HO: sending to branch %d with tag %d\n", branch, 0);
-      MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
-      MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
+      // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
+      // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
       printf("HO: b = %f\n", b);
     }
     sqlite3_close(db);
@@ -236,7 +306,7 @@ int main(int argc, char **argv)
     
     if (my_rank == 2) {
       // receive anything
-      MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+      // MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
       printf("BO2 recv from master: %s\n", message);
       getBalance(2);
     }
@@ -252,7 +322,7 @@ int main(int argc, char **argv)
     
     dest = 0;
     // send message to master
-    MPI_Send(message, strlen(message) + 1, MPI_CHAR, dest, tag, MPI_COMM_WORLD);
+    // MPI_Send(message, strlen(message) + 1, MPI_CHAR, dest, tag, MPI_COMM_WORLD);
   }
 
   MPI_Finalize();
