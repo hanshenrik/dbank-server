@@ -280,6 +280,7 @@ void *connection_handler(void *socket_descriptor) {
   char *zErrMsg = 0;
   int rc;
   char query[QUERY_SIZE];
+  sqlite3_stmt *statement;
 
   // MPI variables
   char message[MESSAGE_SIZE];
@@ -325,15 +326,14 @@ void *connection_handler(void *socket_descriptor) {
       return(1);
     }
     
-    sqlite3_stmt *statement;
     int isAuth = 0;
-    sprintf(query, "SELECT username, password FROM users WHERE username = '%s'", username); // switch password to salt
+    sprintf(query, "SELECT password FROM users WHERE username = '%s'", username); // switch password to salt
     sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
     // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
     int row = sqlite3_step(statement);
     if (row == SQLITE_ROW) {
       const unsigned char *dbPassword;
-      dbPassword = sqlite3_column_text(statement, 1);
+      dbPassword = sqlite3_column_text(statement, 0);
       if ( strcmp(password, dbPassword) == 0 ) {
         printf("CB: match!\n");
         isAuth = 1;
@@ -346,7 +346,7 @@ void *connection_handler(void *socket_descriptor) {
     }
     sqlite3_finalize(statement);
     
-    if (isAuth) { // user was valid, continue
+    if (isAuth) { // Valid username + password
       printf("HO: user authenticated!\n");
 
       // Finished with users.db, close it and open accounts.db
@@ -354,21 +354,16 @@ void *connection_handler(void *socket_descriptor) {
       rc = sqlite3_open_v2("accounts.db", &db, SQLITE_OPEN_READONLY, NULL);
 
       // find out which branch to contact
-      sqlite3_stmt *statement;
       sprintf(query, "SELECT branch FROM accounts WHERE id = %d AND username = '%s'", account_id, username);
-      printf("query: %s\n", query);
       sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
       // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
       int row = sqlite3_step(statement);
       int branch;
-      if (row == SQLITE_ROW) {
-        // const unsigned char *text;
-        // text = sqlite3_column_text(statement, 0);
+      if (row == SQLITE_ROW) { // username + account_id matches
         branch = sqlite3_column_int(statement, 0);
-        printf("%d: %d\n", row, branch);
-      } else {
-        fprintf(stderr, "Failed..\n");
-        return 1;
+        printf("HO: %s's account %d runs on branch %d\n", username, account_id, branch);
+      } else { // username + account_id doesn't match
+        fprintf(stderr, "HO: username + account_id doesn't match\n");
       }
       sqlite3_finalize(statement);
 
@@ -378,6 +373,9 @@ void *connection_handler(void *socket_descriptor) {
       // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
       // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
       printf("HO: b = %f\n", b);
+    } else { // Invalid username + password
+      printf("HO: user info not valid!\n");
+      // TODO: let user know this
     }
   }
    
