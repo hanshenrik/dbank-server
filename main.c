@@ -61,23 +61,6 @@ double get_balance(int account_number) {
   return balance;
 }
 
-
-static int callback(void *pswd, int argc, char **argv, char **azColName){
-  int i;
-  char *inputPassword = (char*) pswd;
-  char *dbPassword = argv[1];
-  printf("CB: argc = %d\n", argc);
-  printf("CB: password = %s\n", inputPassword);
-  printf("CB: dbPassword = %s\n", dbPassword);
-  if (strcmp(inputPassword, dbPassword) == 0) {
-    printf("CB: match!\n");
-    return SQLITE_OK;
-  } else {
-    printf("CB: no match!\n");
-  }
-  return 1;
-}
-
 int main(int argc, char **argv)
 { // MPI variables
   int my_rank, NP;
@@ -298,11 +281,14 @@ void *connection_handler(void *socket_descriptor) {
   int rc;
   char query[QUERY_SIZE];
 
+  // MPI variables
+  char message[MESSAGE_SIZE];
+
   // Get socket descriptor
-  int sock = *(int*)socket_descriptor;
+  int sock = *(int*) socket_descriptor;
   
   // Answer client
-  server_message = "S: Connection successfull! Give me: username;password;account_id;operation;amount\n";
+  server_message = "S: Connection successfull! Give me: username;password;account_id;operation;amount";
   write(sock, server_message, strlen(server_message));
   
   // Wait for messages from client
@@ -339,28 +325,45 @@ void *connection_handler(void *socket_descriptor) {
       return(1);
     }
     
+    sqlite3_stmt *statement;
+    int isAuth = 0;
     sprintf(query, "SELECT username, password FROM users WHERE username = '%s'", username); // switch password to salt
-    rc = sqlite3_exec(db, query, callback, (void*) password, &zErrMsg);
-    printf("HO: rc = %d\n", rc);
-    
-    if(rc != SQLITE_OK) {
-      // TODO: send error to client
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      sqlite3_free(zErrMsg);
+    sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
+    // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
+    int row = sqlite3_step(statement);
+    if (row == SQLITE_ROW) {
+      const unsigned char *dbPassword;
+      dbPassword = sqlite3_column_text(statement, 1);
+      if ( strcmp(password, dbPassword) == 0 ) {
+        printf("CB: match!\n");
+        isAuth = 1;
+      } else {
+        printf("CB: password didn't match!\n");
+      }
+    } else {
+      fprintf(stderr, "Failed..\n");
+      return 1;
     }
-    else { // user was valid, continue
+    sqlite3_finalize(statement);
+    
+    if (isAuth) { // user was valid, continue
       printf("HO: user authenticated!\n");
+
+      // Finished with users.db, close it and open accounts.db
+      sqlite3_close(db);
+      rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
 
       // find out which branch to contact
       sqlite3_stmt *statement;
-      sprintf(query, "SELECT branch FROM users WHERE username = '%s'", username);
+      sprintf(query, "SELECT branch FROM accounts WHERE id = %d AND username = '%s'", account_id, username);
+      printf("query: %s\n", query);
       sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
       // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
       int row = sqlite3_step(statement);
       int branch;
       if (row == SQLITE_ROW) {
         // const unsigned char *text;
-        // text = sqlite3_column_int(statement, 0);
+        // text = sqlite3_column_text(statement, 0);
         branch = sqlite3_column_int(statement, 0);
         printf("%d: %d\n", row, branch);
       } else {
@@ -370,22 +373,19 @@ void *connection_handler(void *socket_descriptor) {
       sqlite3_finalize(statement);
 
       double b;
-      // sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
+      sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
       printf("HO: sending to branch %d with tag %d\n", branch, 0);
       // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
       // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
       printf("HO: b = %f\n", b);
     }
-    sqlite3_close(db);
   }
    
   if (read_size == 0) {
     puts("CH: Client disconnected.");
     fflush(stdout);
-  }
-
-  else if (read_size == -1) {
-    perror("recv failed");
+  } else if (read_size == -1) {
+    perror("CH: recv failed");
   }
 
   // Free socket pointer
