@@ -226,9 +226,14 @@ int main(int argc, char **argv)
     
     if (my_rank == 2) {
       // receive anything
-      // MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-      // printf("BO2 recv from master: %s\n", message);
-      // get_balance(2);
+      MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+      printf("BO2 recv from master: %s\n", message);
+      // TODO: do something based on message
+      // sprintf(message, "From process %d on processor %s: Work done!", my_rank, name);
+      // MPI_Send(message, strlen(message) + 1, MPI_CHAR, MASTER, 0, MPI_COMM_WORLD);
+      double b = 44.0;
+      MPI_Send(&b, sizeof(double), MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
+      printf("BO2 sent: %f\n", b);
     }
 
     // wait for all children to exit
@@ -243,6 +248,7 @@ int main(int argc, char **argv)
     dest = 0;
     // send message to master
     // MPI_Send(message, strlen(message) + 1, MPI_CHAR, dest, tag, MPI_COMM_WORLD);
+    printf("BO%d end\n", my_rank);
   }
 
   MPI_Finalize();
@@ -284,6 +290,7 @@ void *connection_handler(void *socket_descriptor) {
 
   // MPI variables
   char message[MESSAGE_SIZE];
+  MPI_Status status;
 
   // Get socket descriptor
   int sock = *(int*) socket_descriptor;
@@ -370,8 +377,9 @@ void *connection_handler(void *socket_descriptor) {
       double b;
       sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
       printf("HO: sending to branch %d with tag %d\n", branch, 0);
-      // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
-      // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
+      // send and receive blocking
+      MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
+      MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
       printf("HO: b = %f\n", b);
     } else { // Invalid username + password
       printf("HO: user info not valid!\n");

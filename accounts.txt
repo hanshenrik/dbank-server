@@ -1,0 +1,5 @@
+id  branch  username  balance
+1   1       kreps     100.0
+2   2       kreps     50.0
+3   1       reke      220.0
+4   1       laks      3000.0
