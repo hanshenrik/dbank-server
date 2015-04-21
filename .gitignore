@@ -7,5 +7,9 @@
 # Unignore all dirs
 !*/
 
+# Unignore mympirun and hosts
+!mympirun
+!hosts
+
 # Ignore clusters.txt
 clusters.txt
