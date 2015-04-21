@@ -29,7 +29,7 @@ double balance = 13.37;
 
 void *connection_handler(void *);
 
-double getBalance(int account_number) {
+double get_balance(int account_number) {
   // rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
 
   // if (rc) {
@@ -244,7 +244,7 @@ int main(int argc, char **argv)
       // receive anything
       // MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
       printf("BO2 recv from master: %s\n", message);
-      getBalance(2);
+      get_balance(2);
     }
 
     // wait for all children to exit
@@ -305,7 +305,7 @@ void *connection_handler(void *socket_descriptor) {
   char username[30]// = "reke";
   char password[30]// = "rekex"; // should only receive salt and hash.
   int account_id// = 2;
-  int operation// = 0; // 0 = getBalance, 1 = deposit, 2 = withdraw, 3 = transfer
+  int operation// = 0; // 0 = get_balance, 1 = deposit, 2 = withdraw, 3 = transfer
   double amount// = 33.33;
 
   // Answer client
