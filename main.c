@@ -87,6 +87,7 @@ int main(int argc, char **argv)
   char name[MPI_MAX_PROCESSOR_NAME + 1];
   char message[MESSAGE_SIZE];
   MPI_Status status;
+  
   MPI_Init(&argc, &argv); // argc and argv passed by address to all MPI processes
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); // returns taskID = rank of calling process
   MPI_Comm_size(MPI_COMM_WORLD, &NP); // returns total no of MPI processes available
@@ -214,7 +215,7 @@ int main(int argc, char **argv)
         printf("DONE\n");
         break;
       } else {
-        fprintf(stderr, "Failed..\n");
+        fprintf(stderr, "BO: Row Failed..\n");
         return 1;
       }
     }
@@ -287,9 +288,8 @@ int transfer(int from_account_number, int to_account_number, double amount)
 /* Handles client connections */
 void *connection_handler(void *socket_descriptor) {
   int read_size;
-  char *message, client_message[CLIENT_MESSAGE_SIZE];
+  char *server_message, client_message[CLIENT_MESSAGE_SIZE];
   const char *separator = ";";
-  char** parameters;
   
   // DB variables
   sqlite3 *db;
@@ -301,20 +301,34 @@ void *connection_handler(void *socket_descriptor) {
   // Get socket descriptor
   int sock = *(int*)socket_descriptor;
   
-  // Get request parameters
-  char username[30]// = "reke";
-  char password[30]// = "rekex"; // should only receive salt and hash.
-  int account_id// = 2;
-  int operation// = 0; // 0 = get_balance, 1 = deposit, 2 = withdraw, 3 = transfer
-  double amount// = 33.33;
-
   // Answer client
-  message = "S: Connection successfull! Give me: username;password;account_id;operation;amount\n";
-  write(sock, message, strlen(message));
+  server_message = "S: Connection successfull! Give me: username;password;account_id;operation;amount\n";
+  write(sock, server_message, strlen(server_message));
   
   // Wait for messages from client
   while ( (read_size = recv(sock, client_message, CLIENT_MESSAGE_SIZE, 0)) > 0 ) {
-    //TODO: split client_message and assign to username, etc.
+    int i;
+    char *token, *parameters[5];
+    char *username, *password;
+    int account_id, operation;
+    double amount;
+
+    i = 0;
+    token = strtok(client_message, separator);
+    // Separate request parameters
+    while (token != NULL) {
+      parameters[i++] = token;
+      token = strtok(NULL, separator);
+    }
+    
+    // Put parameters in variables
+    username    = parameters[0];
+    password    = parameters[1]; // should only receive salt and hash.
+    account_id  = atoi(parameters[2]);
+    operation   = atoi(parameters[3]); // 0 = get_balance, 1 = deposit, 2 = withdraw, 3 = transfer
+    amount      = atof(parameters[4]);
+
+    printf("S: %s, %s, %d, %d, %f\n", username, password, account_id, operation, amount);
 
     // authenticate user against users.db
     rc = sqlite3_open("users.db", &db); // change to v2 for read-only flags etc.
@@ -330,6 +344,7 @@ void *connection_handler(void *socket_descriptor) {
     printf("HO: rc = %d\n", rc);
     
     if(rc != SQLITE_OK) {
+      // TODO: send error to client
       fprintf(stderr, "SQL error: %s\n", zErrMsg);
       sqlite3_free(zErrMsg);
     }
@@ -355,7 +370,7 @@ void *connection_handler(void *socket_descriptor) {
       sqlite3_finalize(statement);
 
       double b;
-      sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
+      // sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
       printf("HO: sending to branch %d with tag %d\n", branch, 0);
       // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
       // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
