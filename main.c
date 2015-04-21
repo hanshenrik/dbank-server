@@ -30,34 +30,6 @@ double balance = 13.37;
 void *connection_handler(void *);
 
 double get_balance(int account_number) {
-  // rc = sqlite3_open_v2("accounts.db", &db, SQLITE_OPEN_READWRITE, NULL);
-
-  // if (rc) {
-  //   fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
-  //   sqlite3_close(db);
-  //   return(1);
-  // }
-  
-  // sqlite3_stmt *statement;
-  // sprintf(query, "SELECT balance FROM accounts WHERE id = '%s'", account_number);
-  // sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
-  // // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
-
-  // int row = sqlite3_step(statement);
-  // printf("row = %d\n", row);
-  // if (row == SQLITE_ROW) {
-  //   double balance;
-  //   balance = sqlite3_column_int(statement, 0);
-  // } else if (row == SQLITE_DONE) {
-  //   break;
-  // } else {
-  //   fprintf(stderr, "Failed..\n");
-  //   return 1;
-  // }
-  // sqlite3_finalize(statement);
-  // sqlite3_close(db);
-
-  //MPI_Send(&balance, sizeof(balance) + 1, MPI_DOUBLE, MASTER, 50, MPI_COMM_WORLD);
   return balance;
 }
 
@@ -190,6 +162,19 @@ int main(int argc, char **argv)
         }
         if (pid == 0) {
           printf("BO%d: pid == 0, id = %d, balance = %f\n", my_rank, id, balance);
+          
+          if (my_rank == 4 && id == 4) { // DEV only test for 4_4 to avoid MPI_Recv errors
+            // receive anything
+            printf("4 4 wating for MPI_Recv...\n");
+            MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+            printf("BO2 recv from master: %s\n", message);
+            // TODO: do something based on message
+            // sprintf(message, "From process %d on processor %s: Work done!", my_rank, name);
+            // MPI_Send(message, strlen(message) + 1, MPI_CHAR, MASTER, 0, MPI_COMM_WORLD);
+            MPI_Send(&balance, sizeof(double), MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
+            printf("BO2 sent: %f\n", balance);
+          }
+
           return 0;
         } else {
           // printf("BO: pid != 0\n");
@@ -204,37 +189,6 @@ int main(int argc, char **argv)
     }
     sqlite3_finalize(statement);
     sqlite3_close(db);
-
-    // start child processes (bank accounts)
-    // for (i = 0; i < number_of_accounts; i++)
-    // { pid = fork();
-    //   if (pid < 0 ) {
-    //     printf("BO: pid < 0, fork failed!\n");
-    //     continue;
-    //   }
-    //   if (pid == 0) {
-    //     printf("BO%d: pid == 0, i = %d\n", my_rank, i);
-    //     // while (1) {
-    //     //   sleep(1);
-    //     //   printf("%d_%d\n", my_rank, i);
-    //     // }
-    //     return 0;
-    //   } else {
-    //     // printf("BO: pid != 0\n");
-    //   }
-    // }
-    
-    if (my_rank == 2) {
-      // receive anything
-      MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-      printf("BO2 recv from master: %s\n", message);
-      // TODO: do something based on message
-      // sprintf(message, "From process %d on processor %s: Work done!", my_rank, name);
-      // MPI_Send(message, strlen(message) + 1, MPI_CHAR, MASTER, 0, MPI_COMM_WORLD);
-      double b = 44.0;
-      MPI_Send(&b, sizeof(double), MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
-      printf("BO2 sent: %f\n", b);
-    }
 
     // wait for all children to exit
     // while ( (wpid = wait(&account_status) ) > 0) {}
