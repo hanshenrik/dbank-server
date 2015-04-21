@@ -1,2 +1,2 @@
 #!/bin/bash
-mpirun --prefix /opt/gridware/pkg/mpi/openmpi/1.6.3/gcc-4.4.7 --hostfile hosts $*
+mpirun --prefix /shared/openmpi/ --hostfile hosts $*
