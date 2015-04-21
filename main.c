@@ -1,30 +1,18 @@
-/* General stuff */
-#include <stdio.h>
+#include <stdio.h>      // General stuff
 #include <stdlib.h>
 #include <string.h>
-
-/* Sockets */
-#include <sys/socket.h>
+#include <sys/socket.h> // Sockets
 #include <arpa/inet.h>
+#include <sqlite3.h>    // Database - sqlite3
+#include <mpi.h>        // MPI
 
-/* DB - sqlite3 */
-#include <sqlite3.h>
-
-/* MPI */
-#include <mpi.h>
-
-
-/* MPI related */
-#define MESSAGE_SIZE 100
+#define MESSAGE_SIZE 100          // MPI related
 #define MASTER  0
-
-/* sqlite3 related */
-#define QUERY_SIZE 500
+#define QUERY_SIZE 500            // sqlite3 related
 // TODO: define all db cols here
-
-/* Sockets related */
-#define CLIENT_MESSAGE_SIZE 2000
-#define MAX_CONNECTIONS_IN_QUEUE 3
+#define CLIENT_MESSAGE_SIZE 2000  // Sockets related
+#define MAX_CONN_REQ_IN_QUEUE 3
+#define PORT_NUMBER 5108
 
 double balance = 13.37;
 
@@ -35,6 +23,9 @@ double balance = 13.37;
 // MPI_Waitall
 // MPI_Waitany
 
+
+// look into https://github.com/bumptech/stud for encryption!
+// http://simplestcodings.blogspot.co.uk/2010/08/secure-server-client-using-openssl-in-c.html
 
 void *connection_handler(void *);
 
@@ -101,11 +92,6 @@ int main(int argc, char **argv)
   MPI_Comm_size(MPI_COMM_WORLD, &NP); // returns total no of MPI processes available
 
   // shared bank variables
-  sqlite3 *db;
-  sqlite3_backup *pBackup;
-  char *zErrMsg = 0;
-  int rc;
-  char query[QUERY_SIZE];
 
   int i;
   for (i = 0; i < argc; i++) {
@@ -114,119 +100,63 @@ int main(int argc, char **argv)
   
   if (my_rank == MASTER) // master
   { // Head Office variables
+    // Print startup info
+    printf("HO: started\n");
+    MPI_Get_processor_name(name, &length);
+    printf("HO: name = %s, my_rank = %d\n", name, my_rank);
+    printf("HO: balance = %f\n", balance);
 
-    // Socket stuff
+    /* Socket stuff */
     int socket_descriptor, client_sock, c, *new_sock;
     struct sockaddr_in server, client;
      
     // Create socket
     socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_descriptor == -1) {
-      printf("Could not create socket");
+      printf("S: Could not create socket");
     }
-    puts("Socket created");
+    puts("S: Socket created");
      
     // Prepare sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 5108 );
+    server.sin_port = htons( PORT_NUMBER );
      
     // Bind
     if ( bind(socket_descriptor,(struct sockaddr *)&server , sizeof(server)) < 0) {
-      perror("Bind failed. Error");
+      perror("S: Bind failed. Error");
       return 1;
     }
-    puts("Bind done");
+    puts("S: Bind done");
      
     // Listen for new requests
-    listen(socket_descriptor, MAX_CONNECTIONS_IN_QUEUE);
-    puts("Waiting for incoming connections...");
+    listen(socket_descriptor, MAX_CONN_REQ_IN_QUEUE);
+    puts("S: Waiting for incoming connections...");
      
      
     c = sizeof(struct sockaddr_in);
     // Accept incoming connection
     while ( (client_sock = accept(socket_descriptor, (struct sockaddr *)&client, (socklen_t*)&c)) ) {
-      puts("Connection accepted!");
+      puts("S: Connection accepted!");
       
       pthread_t sniffer_thread;
       new_sock = malloc(1);
       *new_sock = client_sock;
       
       if ( pthread_create(&sniffer_thread, NULL,  connection_handler, (void*) new_sock) < 0) {
-        perror("could not create thread");
+        perror("S: Could not create thread");
         return 1;
       }
        
       // Now join the thread, so that we dont terminate before the thread
       pthread_join(sniffer_thread, NULL);
-      puts("Handler assigned");
+      puts("S: Handler assigned");
     }
      
     if (client_sock < 0) {
-      perror("accept failed");
+      perror("S: Accept failed");
       return 1;
     }
-
-
-
-    // DEV should be retrieved from socket request
-    char username[30] = "reke";
-    char password[30] = "rekex"; // should only receive salt and hash.
-    int account_id = 2;
-    int operation = 0; // 0 = getBalance, 1 = deposit, 2 = withdraw, 3 = transfer
-    double amount = 33.33;
-
-    printf("HO: started\n");
-    MPI_Get_processor_name(name, &length);
-    printf("HO: name = %s, my_rank = %d\n", name, my_rank);
-    printf("HO: balance = %f\n", balance);
-
-    // authenticate user against users.db
-    rc = sqlite3_open("users.db", &db); // change to v2 for read-only flags etc.
-
-    if (rc) {
-      fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
-      sqlite3_close(db);
-      return(1);
-    }
-    
-    sprintf(query, "SELECT username, password FROM users WHERE username = '%s'", username); // switch password to salt
-    rc = sqlite3_exec(db, query, callback, (void*) password, &zErrMsg);
-    printf("HO: rc = %d\n", rc);
-    
-    if(rc != SQLITE_OK) {
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      sqlite3_free(zErrMsg);
-    }
-    else { // user was valid, continue
-      printf("HO: user authenticated!\n");
-
-      // find out which branch to contact
-      sqlite3_stmt *statement;
-      sprintf(query, "SELECT branch FROM users WHERE username = '%s'", username);
-      sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
-      // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
-      int row = sqlite3_step(statement);
-      int branch;
-      if (row == SQLITE_ROW) {
-        // const unsigned char *text;
-        // text = sqlite3_column_int(statement, 0);
-        branch = sqlite3_column_int(statement, 0);
-        printf("%d: %d\n", row, branch);
-      } else {
-        fprintf(stderr, "Failed..\n");
-        return 1;
-      }
-      sqlite3_finalize(statement);
-
-      double b;
-      sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
-      printf("HO: sending to branch %d with tag %d\n", branch, 0);
-      // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
-      // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
-      printf("HO: b = %f\n", b);
-    }
-    sqlite3_close(db);
     
     // for (source = 1; source < NP; source++)
     // { MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
@@ -239,6 +169,12 @@ int main(int argc, char **argv)
     pid_t pid = 0;
     int number_of_accounts = 3;
     int account_status = 0, wpid, i;
+
+    sqlite3 *db;
+    sqlite3_backup *pBackup;
+    char *zErrMsg = 0;
+    int rc;
+    char query[QUERY_SIZE];
 
     MPI_Get_processor_name(name, &length);
     printf("BO: name = %s, my_rank = %d\n", name, my_rank);
@@ -349,29 +285,92 @@ int transfer(int from_account_number, int to_account_number, double amount)
 
 
 /* Handles client connections */
-void *connection_handler(void *socket_descriptor)
-{ // Get socket descriptor
-  int sock = *(int*)socket_descriptor;
-  
+void *connection_handler(void *socket_descriptor) {
   int read_size;
   char *message, client_message[CLIENT_MESSAGE_SIZE];
+  const char *separator = ";";
+  char** parameters;
   
+  // DB variables
+  sqlite3 *db;
+  sqlite3_backup *pBackup;
+  char *zErrMsg = 0;
+  int rc;
+  char query[QUERY_SIZE];
+
+  // Get socket descriptor
+  int sock = *(int*)socket_descriptor;
+  
+  // Get request parameters
+  char username[30]// = "reke";
+  char password[30]// = "rekex"; // should only receive salt and hash.
+  int account_id// = 2;
+  int operation// = 0; // 0 = getBalance, 1 = deposit, 2 = withdraw, 3 = transfer
+  double amount// = 33.33;
+
   // Answer client
-  message = "Connection successfull! Processing request...\n";
+  message = "S: Connection successfull! Give me: username;password;account_id;operation;amount\n";
   write(sock, message, strlen(message));
   
   // Wait for messages from client
-  while ( (read_size = recv(sock, client_message, CLIENT_MESSAGE_SIZE, 0)) > 0 )
-  { // TODO: process the queries
+  while ( (read_size = recv(sock, client_message, CLIENT_MESSAGE_SIZE, 0)) > 0 ) {
+    //TODO: split client_message and assign to username, etc.
+
+    // authenticate user against users.db
+    rc = sqlite3_open("users.db", &db); // change to v2 for read-only flags etc.
+
+    if (rc) {
+      fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+      return(1);
+    }
+    
+    sprintf(query, "SELECT username, password FROM users WHERE username = '%s'", username); // switch password to salt
+    rc = sqlite3_exec(db, query, callback, (void*) password, &zErrMsg);
+    printf("HO: rc = %d\n", rc);
+    
+    if(rc != SQLITE_OK) {
+      fprintf(stderr, "SQL error: %s\n", zErrMsg);
+      sqlite3_free(zErrMsg);
+    }
+    else { // user was valid, continue
+      printf("HO: user authenticated!\n");
+
+      // find out which branch to contact
+      sqlite3_stmt *statement;
+      sprintf(query, "SELECT branch FROM users WHERE username = '%s'", username);
+      sqlite3_prepare_v2(db, query, strlen(query) + 1, &statement, NULL);
+      // TODO: Bind values to host parameters using the sqlite3_bind_*() interfaces.
+      int row = sqlite3_step(statement);
+      int branch;
+      if (row == SQLITE_ROW) {
+        // const unsigned char *text;
+        // text = sqlite3_column_int(statement, 0);
+        branch = sqlite3_column_int(statement, 0);
+        printf("%d: %d\n", row, branch);
+      } else {
+        fprintf(stderr, "Failed..\n");
+        return 1;
+      }
+      sqlite3_finalize(statement);
+
+      double b;
+      sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
+      printf("HO: sending to branch %d with tag %d\n", branch, 0);
+      // MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
+      // MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
+      printf("HO: b = %f\n", b);
+    }
+    sqlite3_close(db);
   }
    
-  if (read_size == 0)
-  { puts("CH: Client disconnected.");
+  if (read_size == 0) {
+    puts("CH: Client disconnected.");
     fflush(stdout);
   }
 
-  else if(read_size == -1)
-  { perror("recv failed");
+  else if (read_size == -1) {
+    perror("recv failed");
   }
 
   // Free socket pointer
