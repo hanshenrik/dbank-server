@@ -32,9 +32,10 @@ int main(int argc, char **argv) {
   }
   
   sprintf(query, "CREATE TABLE users(username VARCHAR(30) UNIQUE, password VARCHAR(30)); \
-                  INSERT INTO users VALUES('kreps', 'krepsx'); \
-                  INSERT INTO users VALUES('reke', 'rekex'); \
-                  INSERT INTO users VALUES('laks', 'laksx');");
+                  INSERT INTO users VALUES('john', 'johnx'); \
+                  INSERT INTO users VALUES('paul', 'paulx'); \
+                  INSERT INTO users VALUES('george', 'georgex'); \
+                  INSERT INTO users VALUES('ringo', 'ringox');");
   rc = sqlite3_exec(db, query, callback, 0, &zErrMsg);
   if(rc != SQLITE_OK) {
     fprintf(stderr, "SQL error: %s\n", zErrMsg);
@@ -63,10 +64,11 @@ int main(int argc, char **argv) {
   }
   
   sprintf(query, "CREATE TABLE accounts(id INT UNIQUE, branch INT, username VARCHAR(30), balance DOUBLE); \
-                  INSERT INTO accounts VALUES(1, 1, 'kreps', 100); \
-                  INSERT INTO accounts VALUES(2, 2, 'kreps', 50); \
-                  INSERT INTO accounts VALUES(3, 1, 'reke', 220); \
-                  INSERT INTO accounts VALUES(4, 1, 'laks', 3000);");
+                  INSERT INTO accounts VALUES(1, 1, 'john', 100); \
+                  INSERT INTO accounts VALUES(2, 1, 'john', 50); \
+                  INSERT INTO accounts VALUES(3, 1, 'paul', 220); \
+                  INSERT INTO accounts VALUES(4, 4, 'george', 250); \
+                  INSERT INTO accounts VALUES(5, 1, 'ringo', 3000);");
   rc = sqlite3_exec(db, query, callback, 0, &zErrMsg);
   if(rc != SQLITE_OK) {
     fprintf(stderr, "SQL error: %s\n", zErrMsg);
