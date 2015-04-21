@@ -30,7 +30,7 @@ double balance = 13.37;
 void *connection_handler(void *);
 
 double get_balance(int account_number) {
-  // rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
+  // rc = sqlite3_open_v2("accounts.db", &db, SQLITE_OPEN_READWRITE, NULL);
 
   // if (rc) {
   //   fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
@@ -164,7 +164,7 @@ int main(int argc, char **argv)
     printf("BO: name = %s, my_rank = %d\n", name, my_rank);
 
     // get number of accounts to start
-    rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
+    rc = sqlite3_open_v2("accounts.db", &db, SQLITE_OPEN_READONLY, NULL);
 
     if (rc) {
       fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
@@ -227,8 +227,8 @@ int main(int argc, char **argv)
     if (my_rank == 2) {
       // receive anything
       // MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-      printf("BO2 recv from master: %s\n", message);
-      get_balance(2);
+      // printf("BO2 recv from master: %s\n", message);
+      // get_balance(2);
     }
 
     // wait for all children to exit
@@ -317,7 +317,7 @@ void *connection_handler(void *socket_descriptor) {
     printf("S: %s, %s, %d, %d, %f\n", username, password, account_id, operation, amount);
 
     // authenticate user against users.db
-    rc = sqlite3_open("users.db", &db); // change to v2 for read-only flags etc.
+    rc = sqlite3_open_v2("users.db", &db, SQLITE_OPEN_READONLY, NULL);
 
     if (rc) {
       fprintf(stderr, "HO: Can't open database: %s\n", sqlite3_errmsg(db));
@@ -351,7 +351,7 @@ void *connection_handler(void *socket_descriptor) {
 
       // Finished with users.db, close it and open accounts.db
       sqlite3_close(db);
-      rc = sqlite3_open("accounts.db", &db); // change to v2 for read-only flags etc.
+      rc = sqlite3_open_v2("accounts.db", &db, SQLITE_OPEN_READONLY, NULL);
 
       // find out which branch to contact
       sqlite3_stmt *statement;
