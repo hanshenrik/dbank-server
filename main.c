@@ -10,7 +10,7 @@
 #define MASTER  0
 #define QUERY_SIZE 500            // sqlite3 related
 // TODO: define all db cols here
-#define CLIENT_MESSAGE_SIZE 2000  // Sockets related
+#define SOCKET_MESSAGE_SIZE 2000  // Sockets related
 #define MAX_CONN_REQ_IN_QUEUE 3
 #define PORT_NUMBER 5108
 
@@ -26,6 +26,7 @@ double balance = 13.37;
 
 // look into https://github.com/bumptech/stud for encryption!
 // http://simplestcodings.blogspot.co.uk/2010/08/secure-server-client-using-openssl-in-c.html
+// http://stackoverflow.com/questions/11580944/client-to-server-authentication-in-c-using-sockets
 
 void *connection_handler(void *);
 
@@ -48,11 +49,7 @@ int main(int argc, char **argv)
   MPI_Comm_size(MPI_COMM_WORLD, &NP); // returns total no of MPI processes available
 
   // shared bank variables
-
   int i;
-  for (i = 0; i < argc; i++) {
-    // printf("main: argc = %d, argv[%d] = %s\n", argc, i, argv[i]);
-  }
   
   if (my_rank == MASTER) // master
   { // Head Office variables
@@ -114,9 +111,9 @@ int main(int argc, char **argv)
       return 1;
     }
     
-    // for (source = 1; source < NP; source++)
-    // { MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
-    //   printf("HO: %s\n", message);
+    // for (source = 1; source < NP; source++) {
+    //   MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MPI_ANY_SOURCE, tag, MPI_COMM_WORLD, &status);
+    //   printf("HO: MPI_recv: %s\n", message);
     // }
   }
 
@@ -161,20 +158,20 @@ int main(int argc, char **argv)
           continue;
         }
         if (pid == 0) {
-          printf("BO%d: pid == 0, id = %d, balance = %f\n", my_rank, id, balance);
+          printf("BO%d: id = %d, balance = %f\n", my_rank, id, balance);
+          // Let bank account process run 'forever'
           
-          if (my_rank == 4 && id == 4) { // DEV only test for 4_4 to avoid MPI_Recv errors
-            // receive anything
-            printf("4 4 wating for MPI_Recv...\n");
-            MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-            printf("BO2 recv from master: %s\n", message);
-            // TODO: do something based on message
-            // sprintf(message, "From process %d on processor %s: Work done!", my_rank, name);
-            // MPI_Send(message, strlen(message) + 1, MPI_CHAR, MASTER, 0, MPI_COMM_WORLD);
-            MPI_Send(&balance, sizeof(double), MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
-            printf("BO2 sent: %f\n", balance);
+          // DEV only test for 2 accounts
+          if (id == 4 || id == 5) {
+            for (i = 0; i < 1; i++) {
+              // receive messages with tag = id (addressed to this bank account)
+              printf("BO%d_%d wating for MPI_Recv for %dth time\n", my_rank, id, i);
+              MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+              printf("BO%d_%d recv from master: %s\n", my_rank, id, message);
+              MPI_Send(&balance, sizeof(double), MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
+              printf("BO%d_%d 'sent': %f\n", my_rank, id, balance);
+            }
           }
-
           return 0;
         } else {
           // printf("BO: pid != 0\n");
@@ -191,7 +188,7 @@ int main(int argc, char **argv)
     sqlite3_close(db);
 
     // wait for all children to exit
-    // while ( (wpid = wait(&account_status) ) > 0) {}
+    while ( (wpid = wait(&account_status) ) > 0) {}
 
     // wait for my_tank seconds to distinguish slaves in output
     // sleep(my_rank);
@@ -200,6 +197,7 @@ int main(int argc, char **argv)
     sprintf(message, "From process %d on processor %s", my_rank, name);
     
     dest = 0;
+    
     // send message to master
     // MPI_Send(message, strlen(message) + 1, MPI_CHAR, dest, tag, MPI_COMM_WORLD);
     printf("BO%d end\n", my_rank);
@@ -231,7 +229,7 @@ int transfer(int from_account_number, int to_account_number, double amount)
 /* Handles client connections */
 void *connection_handler(void *socket_descriptor) {
   int read_size;
-  char *server_message, client_message[CLIENT_MESSAGE_SIZE];
+  char server_message[SOCKET_MESSAGE_SIZE], client_message[SOCKET_MESSAGE_SIZE];
   const char *separator = ";";
   
   // DB variables
@@ -250,11 +248,13 @@ void *connection_handler(void *socket_descriptor) {
   int sock = *(int*) socket_descriptor;
   
   // Answer client
-  server_message = "S: Connection successfull! Give me: username;password;account_id;operation;amount";
+  printf("CH: before write\n");
+  sprintf(server_message, "S: Connection successfull! Give me: username;password;account_id;operation;amount\n");
   write(sock, server_message, strlen(server_message));
+  printf("CH: after write\n");
   
   // Wait for messages from client
-  while ( (read_size = recv(sock, client_message, CLIENT_MESSAGE_SIZE, 0)) > 0 ) {
+  while ( (read_size = recv(sock, client_message, SOCKET_MESSAGE_SIZE, 0)) > 0 ) {
     int i;
     char *token, *parameters[5];
     char *username, *password;
@@ -263,6 +263,7 @@ void *connection_handler(void *socket_descriptor) {
 
     i = 0;
     token = strtok(client_message, separator);
+    printf("CH: inside while\n");
     // Separate request parameters
     while (token != NULL) {
       parameters[i++] = token;
@@ -328,13 +329,19 @@ void *connection_handler(void *socket_descriptor) {
       }
       sqlite3_finalize(statement);
 
-      double b;
       sprintf(message, "%s | %d | %d | %f", username, account_id, operation, amount);
       printf("HO: sending to branch %d with tag %d\n", branch, 0);
-      // send and receive blocking
+      
+      double b = 1337;
+      // send and receive, blocking
       MPI_Send(message, strlen(message) + 1, MPI_CHAR, branch, 0, MPI_COMM_WORLD);
-      MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, 0, MPI_COMM_WORLD, &status);
-      printf("HO: b = %f\n", b);
+      MPI_Recv(&b, sizeof(double), MPI_DOUBLE, branch, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+      
+      // send balance to client
+      sprintf(server_message, "Balance is £%f\n", b);
+      printf("HO: sending message: %s\n", server_message);
+      write(sock, server_message, strlen(server_message));
+      printf("HO: after write");
     } else { // Invalid username + password
       printf("HO: user info not valid!\n");
       // TODO: let user know this
