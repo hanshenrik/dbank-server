@@ -30,8 +30,29 @@ double balance = 13.37;
 
 void *connection_handler(void *);
 
-double get_balance(int account_number) {
+double get_balance() {
+  printf("get_balance(): %f", balance);
   return balance;
+}
+
+double deposit(double amount)
+{
+  printf("deposit(): %f", amount);
+  balance += amount;
+  printf("deposit(): new balance = %f", balance);
+  return balance;
+}
+
+double withdraw(double amount)
+{
+  printf("withdraw(): %f\n", amount);
+  if (balance > amount) {
+    printf("withdraw(): new balance = %f", balance);
+    return balance;
+  } else {
+    printf("withdraw(): balance !> amount\n");
+    return -1;
+  }
 }
 
 int main(int argc, char **argv)
@@ -204,24 +225,6 @@ int main(int argc, char **argv)
   }
 
   MPI_Finalize();
-  return 0;
-}
-
-
-int deposit(int account_number, double amount)
-{
-  return 0;
-}
-
-int withdraw(int account_number, double amount)
-{
-  // TODO: check balance
-  return 0;
-}
-
-int transfer(int from_account_number, int to_account_number, double amount)
-{
-  // TODO: check balance
   return 0;
 }
 
