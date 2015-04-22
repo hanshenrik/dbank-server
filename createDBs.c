@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
                   INSERT INTO accounts VALUES(2, 1, 'john', 50); \
                   INSERT INTO accounts VALUES(3, 1, 'paul', 220); \
                   INSERT INTO accounts VALUES(4, 4, 'george', 250); \
-                  INSERT INTO accounts VALUES(5, 1, 'ringo', 3000);");
+                  INSERT INTO accounts VALUES(5, 2, 'ringo', 3000);");
   rc = sqlite3_exec(db, query, callback, 0, &zErrMsg);
   if(rc != SQLITE_OK) {
     fprintf(stderr, "SQL error: %s\n", zErrMsg);
