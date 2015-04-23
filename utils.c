@@ -18,6 +18,9 @@
 #define PORT_NUMBER 5108
 #define NUMBER_OF_CLIENT_PARAMETERS 5
 
+static const char USERNAME_KILL[] = "kill";
+static const char PASSWORD_KILL[] = "kill";
+
 /* Handles client connections in separate threads on Head Office node */
 void *connection_handler(void *socket_descriptor) {
   printf("CH: Connection is being handled.\n");
@@ -76,6 +79,11 @@ void *connection_handler(void *socket_descriptor) {
 
     printf("CH: %s, %s, operation = %d, account_id = %d, amount = %f, to_account_id = %d\n", username, password, account_id, operation, amount, to_account_id);
 
+    // Check if SHUTDOWN signal sent
+    if (strcmp(username, USERNAME_KILL) == 0 && strcmp(password, PASSWORD_KILL) == 0) {
+      printf("CH: kill user specified, shutting down!\n");
+      return (void *) 42;
+    }
     // Authenticate user against users.db
     isAuth = authenticate_user(username, password);
     

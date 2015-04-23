@@ -73,6 +73,7 @@ int main(int argc, char **argv) {
     // Socket stuff
     int socket_descriptor, client_sock, c, *new_sock;
     struct sockaddr_in server, client;
+    void *thread_status = 0;
     
     // Create socket
     socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
@@ -111,9 +112,18 @@ int main(int argc, char **argv) {
         perror("HO: Could not create thread");
         return 1;
       }
-       
+      
       // Join the thread, so that MASTER doesn't terminate before the thread
-      pthread_join(sniffer_thread, NULL);
+      pthread_join(sniffer_thread, &thread_status);
+
+      if (thread_status == 42) {
+        printf("HO: Killing signal sent, shutdown system!\n");
+        // What to do here?
+        // MPI_Abort?
+        // MPI_Finalize?
+        // break should get us down to MPI_Finalize and return 0, but doesn't work..
+        break;
+      }
       puts("HO: Socket handler thread exited");
     }
      
