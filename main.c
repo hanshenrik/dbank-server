@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
   // MPI variables
   int my_rank, NP;
   int source, dest;
-  int tag = 50;
+  int tag;
   int length;
   char name[MPI_MAX_PROCESSOR_NAME + 1];
   char message[MESSAGE_SIZE];
@@ -64,9 +64,6 @@ int main(int argc, char **argv) {
   MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); // returns taskID = rank of calling process
   MPI_Comm_size(MPI_COMM_WORLD, &NP); // returns total no of MPI processes available
 
-  // shared bank variables
-  int i;
-  
   if (my_rank == MASTER) { // Head Office (master)
     // Print startup info
     printf("HO: started\n");
@@ -133,8 +130,7 @@ int main(int argc, char **argv) {
   else { // Branch Office (slave)
     // Branch variables
     pid_t pid = 0;
-    int number_of_accounts = 3;
-    int account_status = 0, wpid, i;
+    int account_status = 0, wpid;
 
     // sqlite3 variables
     sqlite3 *db;
@@ -280,13 +276,12 @@ void *connection_handler(void *socket_descriptor) {
   // MPI variables
   char message[MESSAGE_SIZE];
   MPI_Status status;
-  double result;
 
   // Get socket descriptor
   int sock = *(int*) socket_descriptor;
   
   // Answer client
-  sprintf(server_message, "CH: Connection successfull! Please give me: username;password;account_id;operation;amount;to_account\n");
+  sprintf(server_message, "CH: Connection successfull. Please give me: username;password;account_id;operation;amount;to_account\n");
   write(sock, server_message, strlen(server_message));
   
   // Wait for messages from client
@@ -308,7 +303,7 @@ void *connection_handler(void *socket_descriptor) {
     
     if (i < NUMBER_OF_CLIENT_PARAMETERS + 1) {
       printf("CH: i < 6. Not enough parameters!\n");
-      sprintf(server_message, "Not enough parameters!\n");
+      sprintf(server_message, "Not enough parameters.\n");
       printf("CH: sending message: %s\n", server_message);
       write(sock, server_message, strlen(server_message));
       continue;
@@ -338,7 +333,7 @@ void *connection_handler(void *socket_descriptor) {
       branch = get_branch(account_id, username);
       if (branch == -1) {
         printf("CH: username + account_id doesn't match!\n");
-        sprintf(message, "You don't own the account '%d'.\n", account_id);
+        sprintf(message, "You don't have an account with id '%d'.\n", account_id);
         printf("CH: sending message: %s\n", message);
         write(sock, message, strlen(message));
         continue;
@@ -395,13 +390,19 @@ void *connection_handler(void *socket_descriptor) {
 
     } else if (isAuth == 0) { // Invalid username + password
       printf("CH: Invalid password!\n");
-      sprintf(message, "Invalid password!\n");
+      sprintf(message, "Invalid password.\n");
       printf("CH: sending message: %s\n", message);
       write(sock, message, strlen(message));
       continue;
     } else if (isAuth == -1) { // User doen't exist in DB
       printf("CH: Invalid user!\n");
-      sprintf(message, "Invalid username '%s'!\n", username);
+      sprintf(message, "Invalid username '%s'.\n", username);
+      printf("CH: sending message: %s\n", message);
+      write(sock, message, strlen(message));
+      continue;
+    } else if (isAuth == -2) { // DB error
+      printf("CH: DB error!\n");
+      sprintf(message, "Error. Please try again later.\n");
       printf("CH: sending message: %s\n", message);
       write(sock, message, strlen(message));
       continue;
@@ -434,7 +435,7 @@ int authenticate_user(char * username, char * password) {
   if (rc) {
     fprintf(stderr, "authenticate_user(): Can't open database: %s\n", sqlite3_errmsg(db));
     sqlite3_close(db);
-    return(1);
+    isAuth = -2;
   }
   
   sprintf(query, "SELECT password FROM users WHERE username = '%s'", username);
@@ -452,7 +453,7 @@ int authenticate_user(char * username, char * password) {
     }
   } else {
     fprintf(stderr, "CB: couldn't find username!\n");
-    return -1;
+    isAuth = -1;
   }
   sqlite3_finalize(statement);
   sqlite3_close(db);
@@ -521,7 +522,6 @@ double deposit(int account_id, double amount) {
   double bal;
   sqlite3 *db;
   sqlite3_backup *pBackup;
-  char *zErrMsg = 0;
   int rc;
   char query[QUERY_SIZE];
 
@@ -571,7 +571,6 @@ double withdraw(int account_id, double amount) {
   double bal;
   sqlite3 *db;
   sqlite3_backup *pBackup;
-  char *zErrMsg = 0;
   int rc;
   char query[QUERY_SIZE];
 
@@ -633,11 +632,11 @@ char* transfer(int account_id, int to_account_id, double amount) {
   // Make sure current balance is bigger than wanted transfer amount
   bal = get_balance(account_id);
   if (amount > bal) {
-    sprintf(message, "Insufficient funds!\n");
+    sprintf(message, "Insufficient funds.\n");
     printf("transfer(): %s\n", message);
     return message;
   } else if (amount < 0) {
-    sprintf(message, "Can't withdraw negtive amount!\n");
+    sprintf(message, "Can't withdraw negtive amount.\n");
     printf("transfer(): %s", message);
     return message;
   } else {
