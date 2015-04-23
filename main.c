@@ -142,13 +142,13 @@ int main(int argc, char **argv) {
     char query[QUERY_SIZE];
 
     MPI_Get_processor_name(name, &length);
-    printf("BO%d: starting on name = %s\n", my_rank, name);
+    printf("BO %d: starting on name = %s\n", my_rank, name);
 
     // Get the number of accounts to start from DB 
     rc = sqlite3_open_v2("accounts.db", &db, SQLITE_OPEN_READONLY, NULL);
 
     if (rc) {
-      fprintf(stderr, "BO%d: Can't open database: %s\n", my_rank, sqlite3_errmsg(db));
+      fprintf(stderr, "BO %d: Can't open database: %s\n", my_rank, sqlite3_errmsg(db));
       sqlite3_close(db);
       return(1);
     }
@@ -168,26 +168,26 @@ int main(int argc, char **argv) {
         pid = fork();
 
         if (pid < 0 ) {
-          printf("BO%d: pid < 0, fork failed!\n", my_rank);
+          printf("BO %d: pid < 0, fork failed!\n", my_rank);
           continue;
         }
 
         if (pid == 0) { // Inside bank account process
-          printf("BO%d: account_id = %d, balance = %f\n", my_rank, account_id, balance);
+          printf("BO %d: account_id = %d, balance = %f\n", my_rank, account_id, balance);
           // RPC
-          // printf("BO%d_%d: before execl", my_rank, account_id);
+          // printf("BO %d_%d: before execl", my_rank, account_id);
           // execl("rpc/accounts/account_server", "account_server", (char*)NULL);
-          // printf("BO%d_%d: after execl", my_rank, account_id);
+          // printf("BO %d_%d: after execl", my_rank, account_id);
           //
           return 0;
         } else {
-          printf("BO%d: created pid = %d\n", my_rank, pid);
+          printf("BO %d: created pid = %d\n", my_rank, pid);
         }
       } else if (row == SQLITE_DONE) {
-        printf("BO%d: Done creating account processes.\n", my_rank);
+        printf("BO %d: Done creating account processes.\n", my_rank);
         break;
       } else {
-        fprintf(stderr, "BO: sqlite row failed..\n");
+        fprintf(stderr, "BO : sqlite row failed..\n");
         return 1;
       }
     }
@@ -200,9 +200,9 @@ int main(int argc, char **argv) {
 
     // Wait for messages from Head Office for eternity
     while (1) {
-      printf("BO%d waiting for MPI_Recv again\n", my_rank);
+      printf("BO %d waiting for MPI_Recv again\n", my_rank);
       MPI_Recv(message, MESSAGE_SIZE, MPI_CHAR, MASTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-      printf("BO%d MPI_Recv from master with tag %d: %s\n", my_rank, status.MPI_TAG, message);
+      printf("BO %d MPI_Recv from master with tag %d: %s\n", my_rank, status.MPI_TAG, message);
       
       char *token, *params[3];
       int account_id, to_account_id;
@@ -255,10 +255,10 @@ int main(int argc, char **argv) {
       }
 
       MPI_Send(message, MESSAGE_SIZE, MPI_CHAR, MASTER, status.MPI_TAG, MPI_COMM_WORLD);
-      printf("BO%d sent: %s\n", my_rank, message);
+      printf("BO %d sent: %s\n", my_rank, message);
     }
 
-    printf("BO%d: shutting down\n", my_rank);
+    printf("BO %d: shutting down\n", my_rank);
 
     // RPC
     // wait for all children to exit
